@@ -1,4 +1,4 @@
-# 2d-rust-physics-engine
+# 2d-rust-collisiom-engine
 A simple and fast 2d collision managing, physics system system, designed to be utilized for io games.
 
 Note that this system does not support collision management for all polygon types--only circles and axis-aligned squares (for simple hitbox detection).
