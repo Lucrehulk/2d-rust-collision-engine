@@ -7,11 +7,8 @@ At the top of the collision system's code, constants for configuration (i.e. roo
 
 The demo server and client already provides a basic demo of the system in action, while the physics_engine.rs file provides the raw, non-networked code for the physics engine only. 
 
-Some examples from the demo system:
-10k entities in a 1024x1024 space, with a giant immovable wall in the middle:
-![collision demo](https://github.com/user-attachments/assets/56394174-3f88-455f-ba57-0d3d2f20125b)
-A video with 1k entities (for easier viewing of the physics) in the same 1024x1024 space, with the same immovable wall:
-[collision demo video](https://github.com/user-attachments/assets/c5aac9a9-3a0b-4179-9632-15f5436b3144)
+10k entities (not all on screen) in a 1024x1024 space, with a giant immovable wall in the middle:
+<img width="725" height="773" alt="image" src="https://github.com/user-attachments/assets/aa26bbeb-5b39-4e70-ad1d-2f041720f5bc" />
 
 For those wanting specific numbers, I did benchmark the performance of the system in an environment with these settings:
 ```
@@ -57,14 +54,16 @@ The results were as follows:
 1000 entities: ~2mspt
 10000 entities: ~3mspt
 Note that at this point, the 1024x1024 space can't even effectively fit all the entities without some overlap anymore, an image of the 50000 entities is provided below. Note that this is why such a drastic increase in mspt occurs here. In a larger space (as I will show in another benchmark, the performance is still silky smooth)
-50000 entities: ~10-20mspt
-100000 entities: ~45-50mspt
+50000 entities: ~15mspt
+100000 entities: ~30-40mspt (with so many entities this can often vary between ticks by a few)
 ```
 
 An example of how cluttered the system becomes at only 50k entities in the 1024x1024 environment:
-![Screenshot 2025-06-28 144716](https://github.com/user-attachments/assets/85299206-d514-4d65-8549-34ac7275c7d8)
+<img width="746" height="797" alt="image" src="https://github.com/user-attachments/assets/4110db3b-4b46-4467-8f90-0f2b61f1ce29" />
 
-However, for example, after extending the room size to 4096x4096, and extending the dimensions of the spatial grid to 128x128, I found that 100000 entities could perform at even under 10mspt for certain ticks. Note that the environment and spatial grid is still rather cluttered with that many entities.
+However, for example, after extending the room size to 4096x4096, and extending the dimensions of the spatial grid to 128x128, I found that 100000 entities could perform at even under 10mspt (but the majority were in the very low 10s) for certain ticks. Note that the environment and spatial grid is still rather cluttered with that many entities.
 
 A snippet of the 100k entities in the 4096x4096 room, 128x128 spatial grid benchmark:
-![Screenshot 2025-06-28 145522](https://github.com/user-attachments/assets/97f36325-de1a-4120-88cb-5aac630147eb)
+<img width="737" height="793" alt="image" src="https://github.com/user-attachments/assets/1eaf7b3a-7f7b-45c4-9eb6-f1616f12808c" />
+
+Additionally, other features such as spawning/deleting entities, support for creating self-entity driven movement (via cardinal directions or given a specific angle), and more are included.
