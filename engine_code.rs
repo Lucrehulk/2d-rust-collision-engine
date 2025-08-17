@@ -166,81 +166,77 @@ impl Room {
         };
     }
 
-    fn create_entities(&mut self, entities: Vec<(f32, f32, f32, f32, f32, f32, f32, u8)>) {
-        for entity in entities {
-            let grid_body = (entity.6 * 2.0 * ROOM_GRID_RATIO).ceil() as usize + 1;
-            let grid_pos_x = ((entity.0 - entity.6) * ROOM_GRID_RATIO) as usize;
-            let grid_pos_y = ((entity.1 - entity.6) * ROOM_GRID_RATIO) as usize;
-            let mut index = usize::MAX;
-            if self.replacement_queue.len() == 0 {
-                unsafe {
-                    index = self.entities.len();
-                    *self.entities_ptr.add(self.entities.len()) = Entity {
-                        index,
-                        grid_pos_x,
-                        grid_pos_y,
-                        grid_body,
-                        x: entity.0,
-                        y: entity.1,
-                        velocity_x: entity.2,
-                        velocity_y: entity.3,
-                        max_velocity_x: entity.4,
-                        max_velocity_y: entity.5,
-                        acceleration_x: 0.0,
-                        acceleration_y: 0.0,
-                        radius: entity.6,
-                        body_type: entity.7,
-                        movable: entity.4 != 0.0 || entity.5 != 0.0,
-                        replace: false
-                    };
-                    self.entities.set_len(self.entities.len() + 1);
+    fn create_entity(&mut self, x: f32, y: f32, velocity_x: f32, velocity_y: f32, max_velocity_x: f32, max_velocity_y: f32, radius: f32, body_type: u8) {
+        let grid_body = (radius * 2.0 * ROOM_GRID_RATIO).ceil() as usize + 1;
+        let grid_pos_x = ((x - radius) * ROOM_GRID_RATIO) as usize;
+        let grid_pos_y = ((y - radius) * ROOM_GRID_RATIO) as usize;
+        let mut index = usize::MAX;
+        if self.replacement_queue.len() == 0 {
+            unsafe {
+                index = self.entities.len();
+                *self.entities_ptr.add(self.entities.len()) = Entity {
+                    index,
+                    grid_pos_x,
+                    grid_pos_y,
+                    grid_body,
+                    x,
+                    y,
+                    velocity_x,
+                    velocity_y,
+                    max_velocity_x,
+                    max_velocity_y,
+                    acceleration_x: 0.0,
+                    acceleration_y: 0.0,
+                    radius,
+                    body_type,
+                    movable: max_velocity_x != 0.0 || max_velocity_y != 0.0,
+                    replace: false
                 };
-            } else {
-                unsafe { 
-                    index = *self.replacement_queue_ptr;
-                    *self.entities_ptr.add(index) = Entity {
-                        index,
-                        grid_pos_x,
-                        grid_pos_y,
-                        grid_body,
-                        x: entity.0,
-                        y: entity.1,
-                        velocity_x: entity.2,
-                        velocity_y: entity.3,
-                        max_velocity_x: entity.4,
-                        max_velocity_y: entity.5,
-                        acceleration_x: 0.0,
-                        acceleration_y: 0.0,
-                        radius: entity.6,
-                        body_type: entity.7,
-                        movable: entity.4 != 0.0 || entity.5 != 0.0,
-                        replace: false
-                    }; 
-                    let len = self.replacement_queue.len() - 1;
-                    ptr::swap(self.replacement_queue_ptr, self.replacement_queue_ptr.add(len));
-                    self.replacement_queue.set_len(len);
-                };
+                self.entities.set_len(self.entities.len() + 1);
             };
-            for y_pos in grid_pos_y..usize::min(grid_pos_y + grid_body, SPATIAL_GRID_DIMENSION) {
-                for x_pos in grid_pos_x..usize::min(grid_pos_x + grid_body, SPATIAL_GRID_DIMENSION) {
-                    update_grid_position((y_pos << ENCODING_BITS) | x_pos, index, self.spatial_grid_ptr, self.collision_positions_ptr);
-                };
+        } else {
+            unsafe { 
+                index = *self.replacement_queue_ptr;
+                *self.entities_ptr.add(index) = Entity {
+                    index,
+                    grid_pos_x,
+                    grid_pos_y,
+                    grid_body,
+                    x,
+                    y,
+                    velocity_x,
+                    velocity_y,
+                    max_velocity_x,
+                    max_velocity_y,
+                    acceleration_x: 0.0,
+                    acceleration_y: 0.0,
+                    radius,
+                    body_type,
+                    movable: max_velocity_x != 0.0 || max_velocity_y != 0.0,
+                    replace: false
+                }; 
+                let len = self.replacement_queue.len() - 1;
+                ptr::swap(self.replacement_queue_ptr, self.replacement_queue_ptr.add(len));
+                self.replacement_queue.set_len(len);
+            };
+        };
+        for y_pos in grid_pos_y..usize::min(grid_pos_y + grid_body, SPATIAL_GRID_DIMENSION) {
+            for x_pos in grid_pos_x..usize::min(grid_pos_x + grid_body, SPATIAL_GRID_DIMENSION) {
+                update_grid_position((y_pos << ENCODING_BITS) | x_pos, index, self.spatial_grid_ptr, self.collision_positions_ptr);
             };
         };
         self.update_chunks();
     }
 
-    fn remove_entities(&mut self, entities: Vec<*mut Entity>) {
-        for ent in entities {
-            unsafe { 
-                let entity = &mut *ent;
-                entity.replace = true;
-                *self.replacement_queue_ptr.add(self.replacement_queue.len()) = entity.index;
-                self.replacement_queue.set_len(self.replacement_queue.len() + 1);
-                for y_pos in entity.grid_pos_y..usize::min(entity.grid_pos_y + entity.grid_body, SPATIAL_GRID_DIMENSION) {
-                    for x_pos in entity.grid_pos_x..usize::min(entity.grid_pos_x + entity.grid_body, SPATIAL_GRID_DIMENSION) {
-                        remove_grid_position((y_pos << ENCODING_BITS) | x_pos, &entity.index, self.spatial_grid_ptr, self.collision_positions_ptr);
-                    };
+    fn remove_entity(&mut self, index: usize) {
+        unsafe { 
+            let entity = self.entities.get_unchecked_mut(index);
+            entity.replace = true;
+            *self.replacement_queue_ptr.add(self.replacement_queue.len()) = entity.index;
+            self.replacement_queue.set_len(self.replacement_queue.len() + 1);
+            for y_pos in entity.grid_pos_y..usize::min(entity.grid_pos_y + entity.grid_body, SPATIAL_GRID_DIMENSION) {
+                for x_pos in entity.grid_pos_x..usize::min(entity.grid_pos_x + entity.grid_body, SPATIAL_GRID_DIMENSION) {
+                    remove_grid_position((y_pos << ENCODING_BITS) | x_pos, &entity.index, self.spatial_grid_ptr, self.collision_positions_ptr);
                 };
             };
         };
@@ -505,7 +501,7 @@ fn main() {
     // Create random circle entities example
     use rand::Rng; 
     let mut rng = rand::rng();
-    let mut test_entities = Vec::with_capacity(MAX_ENTITIES);
+
     for _ in 0..MAX_ENTITIES {
         let x = rng.random_range(0.0..ROOM_SIZE);
         let y = rng.random_range(0.0..ROOM_SIZE);
@@ -513,9 +509,8 @@ fn main() {
         let vy = rng.random_range(-2.0..2.0); 
         let radius = rng.random_range(2.0..6.0);
         let body_type = /*f32::round(rng.random_range(0.0..1.0)) as u8*/ 1;
-        test_entities.push((x, y, vx, vy, 2.0, 2.0, radius, body_type));
+        world.create_entity(x, y, vx, vy, 2.0, 2.0, radius, body_type);
     }
-    world.create_entities(test_entities);
     
     loop {
         let tick = Instant::now();
