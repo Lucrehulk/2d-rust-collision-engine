@@ -116,6 +116,7 @@ fn update_entity_body(y_bound: usize, x_bound: usize, y_position_update: usize, 
 }
 
 impl Room {
+    #[inline(always)]
     fn init() -> Room {
         let mut entities = Vec::with_capacity(MAX_ENTITIES);
         let entities_ptr = entities.as_mut_ptr();
@@ -142,6 +143,7 @@ impl Room {
         }
     }
 
+    #[inline(always)]
     fn update_chunks(&mut self) {
         let len = self.entities.len();
         if len > THREADS {
@@ -166,6 +168,7 @@ impl Room {
         };
     }
 
+    #[inline(always)]
     fn create_entity(&mut self, x: f32, y: f32, velocity_x: f32, velocity_y: f32, max_velocity_x: f32, max_velocity_y: f32, radius: f32, body_type: u8) {
         let grid_body = (radius * 2.0 * ROOM_GRID_RATIO).ceil() as usize + 1;
         let grid_pos_x = ((x - radius) * ROOM_GRID_RATIO) as usize;
@@ -228,6 +231,7 @@ impl Room {
         self.update_chunks();
     }
 
+    #[inline(always)]
     fn remove_entity(&mut self, index: usize) {
         unsafe { 
             let entity = self.entities.get_unchecked_mut(index);
@@ -243,12 +247,14 @@ impl Room {
         self.update_chunks();
     }
 
+    #[inline(always)]
     fn create_entity_movement_from_angle(&mut self, index: usize, angle: f32) {
         let entity = unsafe { self.entities.get_unchecked_mut(index) };
         entity.acceleration_x = f32::cos(angle) * MOVEMENT_ACCELERATION_CONSTANT;
         entity.acceleration_y = f32::sin(angle) * MOVEMENT_ACCELERATION_CONSTANT;
     }
 
+    #[inline(always)]
     fn create_entity_movement_from_cardinal_direction(&mut self, index: usize, direction: u8) {
         let entity = unsafe { self.entities.get_unchecked_mut(index) };
         match direction {
@@ -284,22 +290,26 @@ impl Room {
         }
     }
 
+    #[inline(always)]
     fn stop_entity_movement(&mut self, index: usize) {
         let entity = unsafe { self.entities.get_unchecked_mut(index) };
         entity.acceleration_x = 0.0;
         entity.acceleration_y = 0.0;
     }
 
+    #[inline(always)]
     fn stop_entity_movement_x(&mut self, index: usize) {
         let entity = unsafe { self.entities.get_unchecked_mut(index) };
         entity.acceleration_x = 0.0;
     }
 
+    #[inline(always)]
     fn stop_entity_movement_y(&mut self, index: usize) {
         let entity = unsafe { self.entities.get_unchecked_mut(index) };
         entity.acceleration_y = 0.0;
     }
 
+    #[inline(always)]
     fn update(&mut self, entities_ptr: usize, spatial_grid_ptr: usize, collision_positions_ptr: usize) {
         let mut spatial_grid_update_threads = Vec::with_capacity(self.chunks_count);
         for thread in 0..self.chunks_count {
