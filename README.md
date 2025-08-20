@@ -61,7 +61,7 @@ Note that at this point, the 1024x1024 space can't even effectively fit all the 
 An example of how cluttered the system becomes at only 50k entities in the 1024x1024 environment:
 <img width="746" height="797" alt="image" src="https://github.com/user-attachments/assets/4110db3b-4b46-4467-8f90-0f2b61f1ce29" />
 
-However, for example, after extending the room size to 4096x4096, and extending the dimensions of the spatial grid to 128x128, I found that 100000 entities could perform at even under 10mspt (but the majority were in the very low 10s) for certain ticks. Note that the environment and spatial grid is still rather cluttered with that many entities.
+However, for example, after extending the room size to 4096x4096, and extending the dimensions of the spatial grid to 128x128, I found that 100000 entities could perform at even under 10mspt (but the majority were in the very low 10ms range, like 11 or 12) for certain ticks. Note that the environment and spatial grid is still rather cluttered with that many entities.
 
 A snippet of the 100k entities in the 4096x4096 room, 128x128 spatial grid benchmark:
 <img width="737" height="793" alt="image" src="https://github.com/user-attachments/assets/1eaf7b3a-7f7b-45c4-9eb6-f1616f12808c" />
