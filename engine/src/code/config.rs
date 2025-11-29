@@ -24,4 +24,3 @@ pub mod config_data {
     // The downtime, in ms, per tick.
     pub const TICK_TIME: u64 = 16;
 }
-
