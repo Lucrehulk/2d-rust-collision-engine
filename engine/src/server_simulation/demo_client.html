@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Collision Manager Demo</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; background: #111; }
+  </style>
+</head>
+<body>
+  <canvas id="world"></canvas>
+  <script>
+    let canvas = document.getElementById("world");
+    let ctx = canvas.getContext("2d");
+    let room_size = 0;
+    let spatial_grid_dimension = 1;
+    let ratio = 0;
+    
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    };
+    
+    window.addEventListener('resize', resize);
+    resize();
+    
+    let entities = {};
+    let camera = {
+        x: 0,
+        y: 0,
+        speed: 10
+    };
+    
+    let keys = {};
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+    
+    function update_camera() {
+        if (keys['ArrowLeft']) camera.x -= camera.speed;
+        if (keys['ArrowRight']) camera.x += camera.speed;
+        if (keys['ArrowUp']) camera.y -= camera.speed;
+        if (keys['ArrowDown']) camera.y += camera.speed;
+    }
+    
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'red';
+        let half_width = canvas.width / 2;
+        let half_height = canvas.height / 2;
+    
+        let left = camera.x - half_width;
+        let right = camera.x + half_width;
+        let top = camera.y - half_height;
+        let bottom = camera.y + half_height;
+    
+        let start_x = Math.max(0, Math.floor(left / ratio) * ratio);
+        let end_x = Math.min(room_size, Math.ceil(right / ratio) * ratio);
+        let start_y = Math.max(0, Math.floor(top / ratio) * ratio);
+        let end_y = Math.min(room_size, Math.ceil(bottom / ratio) * ratio);
+    
+        for (let x = start_x; x <= end_x; x += ratio) {
+            let screen_x = x - camera.x + half_width;
+            let screen_y_start = Math.max(0, 0 - camera.y + half_height);
+            let screen_y_end = Math.min(canvas.height, room_size - camera.y + half_height);
+    
+            ctx.beginPath();
+            ctx.moveTo(screen_x, screen_y_start);
+            ctx.lineTo(screen_x, screen_y_end);
+            ctx.stroke();
+        }
+    
+        for (let y = start_y; y <= end_y; y += ratio) {
+            let screen_y = y - camera.y + half_height;
+            let screen_x_start = Math.max(0, 0 - camera.x + half_width);
+            let screen_x_end = Math.min(canvas.width, room_size - camera.x + half_width);
+    
+            ctx.beginPath();
+            ctx.moveTo(screen_x_start, screen_y);
+            ctx.lineTo(screen_x_end, screen_y);
+            ctx.stroke();
+        }
+    
+        let circles = [];
+    
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'black';
+        ctx.fillStyle = 'gray';
+    
+        for (let id in entities) {
+            let e = entities[id];
+            if (e.body_type) {
+                circles.push(e);
+            } else {
+                let screen_x = e.x - camera.x + canvas.width / 2;
+                let screen_y = e.y - camera.y + canvas.height / 2;
+                ctx.fillRect(screen_x - e.radius, screen_y - e.radius, e.radius * 2, e.radius * 2);
+                ctx.strokeRect(screen_x - e.radius, screen_y - e.radius, e.radius * 2, e.radius * 2);
+            }
+        }
+    
+        ctx.fillStyle = 'lime';
+        for (let entity in circles) {
+            let e = circles[entity];
+            let screen_x = e.x - camera.x + canvas.width / 2;
+            let screen_y = e.y - camera.y + canvas.height / 2;
+            ctx.beginPath();
+            ctx.arc(screen_x, screen_y, e.radius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+        }
+    }
+    
+    function loop() {
+        update_camera();
+        draw();
+        requestAnimationFrame(loop);
+    }
+    loop();
+    
+    function create_ws() {
+        let ws = new WebSocket("ws://localhost:8080/");
+        ws.binaryType = "arraybuffer";
+    
+        ws.onmessage = function(e) {
+            entities = {};
+            let buffer = e.data;
+            let view = new DataView(buffer);
+            switch (view.getUint8(0)) {
+                case 0:
+                    room_size = view.getFloat32(1, true);
+                    spatial_grid_dimension = view.getUint32(5, true);
+                    ratio = room_size / spatial_grid_dimension;
+                    break;
+                case 1:
+                    for (let i = 1; i < buffer.byteLength; i += 17) {
+                        let id = view.getUint32(i, true);
+                        let x = view.getFloat32(i + 4, true);
+                        let y = view.getFloat32(i + 8, true);
+                        let radius = view.getFloat32(i + 12, true);
+                        let body_type = view.getUint8(i + 16);
+                        entities[id] = {
+                            x,
+                            y,
+                            radius,
+                            body_type
+                        };
+                    }
+                    break;
+            }
+        }
+    
+        ws.onclose = function() {
+            create_ws();
+        }
+    }
+    
+    create_ws();
+  </script>
+</body>
+</html>
