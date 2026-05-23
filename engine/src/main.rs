@@ -1,5 +1,5 @@
 use collision_engine::engine::engine::Room;
-use collision_engine::engine::config::config_data::{SPATIAL_GRID_DIMENSION, TICK_TIME};
+use collision_engine::engine::config::config_data::{CELL_SIZE, TICK_TIME};
 use std::{time::Duration, sync::Arc};
 use tokio::{net::TcpListener, sync::{broadcast, mpsc, oneshot}, time::sleep};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -39,7 +39,7 @@ async fn main() {
 
                 let mut init = vec![0];
                 init.extend(ROOM_SIZE.to_le_bytes());
-                init.extend((SPATIAL_GRID_DIMENSION as u32).to_le_bytes());
+                init.extend(((ROOM_SIZE / CELL_SIZE) as u32).to_le_bytes());
                 init.extend((my_id as u32).to_le_bytes());
                 write.send(Message::Binary(init)).await.unwrap();
 
@@ -84,7 +84,7 @@ async fn main() {
                     if let Some(entity) = world.entities.get(id) {
                         if !entity.replace {
                             let new_rad = f32::clamp(entity.radius + delta, 5.0, 50.0);
-                            world.resize_entity(id, new_rad);
+                            world.resize_entity(id, new_rad, false);
                         }
                     }
                 }

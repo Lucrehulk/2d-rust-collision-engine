@@ -1,6 +1,6 @@
 pub mod config_data {
-    // Amount of spatial grid units on a single side (i.e. area = SPATIAL_GRID_DIMENSION * SPATIAL_GRID_DIMENSION).
-    pub const SPATIAL_GRID_DIMENSION: usize = 64;
+    // Cell size of spatial grid cell.
+    pub const CELL_SIZE: f32 = 16.0;
     // Target number of threads for the application to use.
     pub const THREADS: usize = 16;
     // An initial capacity for the max number of entities the system is designed to handle. This value can be exceeded but if you know the maximum amount of entities in your system and are willing to allocate the space it is slightly more optimal to set a known capacity.

@@ -1,5 +1,5 @@
 use super::config::config_data::{
-    COLLISION_SEPARATION_CONSTANT, MAX_ENTITIES, MAX_ENTITIES_TO_REPLACE, SPATIAL_GRID_DIMENSION,
+    COLLISION_SEPARATION_CONSTANT, MAX_ENTITIES, MAX_ENTITIES_TO_REPLACE, CELL_SIZE,
     STORE_COLLISIONS, THREADS,
 };
 use rayon;
@@ -9,9 +9,6 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use wide::f32x4;
-
-const ENCODING_BITS: usize = (usize::BITS - SPATIAL_GRID_DIMENSION.leading_zeros() - 1) as usize;
-const SPATIAL_GRID_AREA: usize = SPATIAL_GRID_DIMENSION * SPATIAL_GRID_DIMENSION;
 
 #[derive(Clone)]
 pub struct Entity {
@@ -39,6 +36,8 @@ pub struct Entity {
 pub struct Room {
     pub spatial_grid: Vec<HashSet<usize>>,
     pub spatial_grid_locks: Vec<AtomicBool>,
+    pub spatial_grid_dimension: usize,
+    pub encoding_bits: usize,
     pub size: f32,
     pub grid_ratio: f32,
     pub entities: Vec<Entity>,
@@ -356,24 +355,26 @@ fn update_entity_body(
     index: usize,
     spatial_grid: *mut HashSet<usize>,
     spatial_grid_locks: *mut AtomicBool,
+    spatial_grid_dimension: usize,
+    encoding_bits: usize
 ) {
     for y_offset in
-        y_position_update..usize::min(y_position_update + y_bound, SPATIAL_GRID_DIMENSION)
+        y_position_update..usize::min(y_position_update + y_bound, spatial_grid_dimension)
     {
         for x_offset in
-            x_position_update..usize::min(x_position_update + x_bound, SPATIAL_GRID_DIMENSION)
+            x_position_update..usize::min(x_position_update + x_bound, spatial_grid_dimension)
         {
-            let position = (y_offset << ENCODING_BITS) | x_offset;
+            let position = (y_offset << encoding_bits) | x_offset;
             update_grid_position(position, index, spatial_grid, spatial_grid_locks);
         }
     }
     for y_offset in
-        y_position_delete..usize::min(y_position_delete + y_bound, SPATIAL_GRID_DIMENSION)
+        y_position_delete..usize::min(y_position_delete + y_bound, spatial_grid_dimension)
     {
         for x_offset in
-            x_position_delete..usize::min(x_position_delete + x_bound, SPATIAL_GRID_DIMENSION)
+            x_position_delete..usize::min(x_position_delete + x_bound, spatial_grid_dimension)
         {
-            let dposition = (y_offset << ENCODING_BITS) | x_offset;
+            let dposition = (y_offset << encoding_bits) | x_offset;
             remove_grid_position(dposition, &index, spatial_grid, spatial_grid_locks);
         }
     }
@@ -382,11 +383,14 @@ fn update_entity_body(
 impl Room {
     #[inline(always)]
     pub fn init(size: f32) -> Room {
-        let grid_ratio = (SPATIAL_GRID_DIMENSION as f32) / size;
+        let spatial_grid_dimension = (size / CELL_SIZE) as usize;
+        let encoding_bits = (usize::BITS - spatial_grid_dimension.leading_zeros() - 1) as usize;
+        let grid_ratio = (spatial_grid_dimension as f32) / size;
+        let spatial_grid_area = spatial_grid_dimension * spatial_grid_dimension;
 
-        let mut spatial_grid = Vec::with_capacity(SPATIAL_GRID_AREA);
-        let mut spatial_grid_locks = Vec::with_capacity(SPATIAL_GRID_AREA);
-        for _ in 0..SPATIAL_GRID_AREA {
+        let mut spatial_grid = Vec::with_capacity(spatial_grid_area);
+        let mut spatial_grid_locks = Vec::with_capacity(spatial_grid_area);
+        for _ in 0..spatial_grid_area {
             spatial_grid.push(HashSet::new());
             spatial_grid_locks.push(AtomicBool::new(false));
         }
@@ -399,6 +403,8 @@ impl Room {
         Room {
             spatial_grid,
             spatial_grid_locks,
+            spatial_grid_dimension,
+            encoding_bits,
             size,
             grid_ratio,
             entities: Vec::with_capacity(MAX_ENTITIES),
@@ -511,10 +517,10 @@ impl Room {
         let spatial_grid_ptr = self.spatial_grid.as_mut_ptr();
         let spatial_grid_locks_ptr = self.spatial_grid_locks.as_mut_ptr();
 
-        for y_pos in grid_pos_y..usize::min(grid_pos_y + grid_body, SPATIAL_GRID_DIMENSION) {
-            for x_pos in grid_pos_x..usize::min(grid_pos_x + grid_body, SPATIAL_GRID_DIMENSION) {
+        for y_pos in grid_pos_y..usize::min(grid_pos_y + grid_body, self.spatial_grid_dimension) {
+            for x_pos in grid_pos_x..usize::min(grid_pos_x + grid_body, self.spatial_grid_dimension) {
                 update_grid_position(
-                    (y_pos << ENCODING_BITS) | x_pos,
+                    (y_pos << self.encoding_bits) | x_pos,
                     index,
                     spatial_grid_ptr,
                     spatial_grid_locks_ptr,
@@ -525,19 +531,19 @@ impl Room {
     }
 
     #[inline(always)]
-    pub fn resize_entity(&mut self, index: usize, delta_size: f32) -> f32 {
+    pub fn resize_entity(&mut self, index: usize, size_change: f32, delta_size: bool) -> f32 {
         let spatial_grid_ptr = self.spatial_grid.as_mut_ptr();
         let spatial_grid_locks_ptr = self.spatial_grid_locks.as_mut_ptr();
         let entity = &mut self.entities[index];
 
         for y_pos in entity.grid_pos_y
-            ..usize::min(entity.grid_pos_y + entity.grid_body, SPATIAL_GRID_DIMENSION)
+            ..usize::min(entity.grid_pos_y + entity.grid_body, self.spatial_grid_dimension)
         {
             for x_pos in entity.grid_pos_x
-                ..usize::min(entity.grid_pos_x + entity.grid_body, SPATIAL_GRID_DIMENSION)
+                ..usize::min(entity.grid_pos_x + entity.grid_body, self.spatial_grid_dimension)
             {
                 remove_grid_position(
-                    (y_pos << ENCODING_BITS) | x_pos,
+                    (y_pos << self.encoding_bits) | x_pos,
                     &index,
                     spatial_grid_ptr,
                     spatial_grid_locks_ptr,
@@ -545,7 +551,12 @@ impl Room {
             }
         }
 
-        entity.radius += delta_size;
+        if delta_size {
+            entity.radius += size_change;
+        } else {
+            entity.radius = size_change;
+        };
+
         if entity.x - entity.radius < 0.0 {
             entity.x = entity.radius;
         } else if entity.x + entity.radius > self.size {
@@ -562,13 +573,13 @@ impl Room {
         entity.grid_pos_y = ((entity.y - entity.radius) * self.grid_ratio) as usize;
 
         for y_pos in entity.grid_pos_y
-            ..usize::min(entity.grid_pos_y + entity.grid_body, SPATIAL_GRID_DIMENSION)
+            ..usize::min(entity.grid_pos_y + entity.grid_body, self.spatial_grid_dimension)
         {
             for x_pos in entity.grid_pos_x
-                ..usize::min(entity.grid_pos_x + entity.grid_body, SPATIAL_GRID_DIMENSION)
+                ..usize::min(entity.grid_pos_x + entity.grid_body, self.spatial_grid_dimension)
             {
                 update_grid_position(
-                    (y_pos << ENCODING_BITS) | x_pos,
+                    (y_pos << self.encoding_bits) | x_pos,
                     index,
                     spatial_grid_ptr,
                     spatial_grid_locks_ptr,
@@ -592,13 +603,13 @@ impl Room {
         let spatial_grid_locks_ptr = self.spatial_grid_locks.as_mut_ptr();
 
         for y_pos in entity.grid_pos_y
-            ..usize::min(entity.grid_pos_y + entity.grid_body, SPATIAL_GRID_DIMENSION)
+            ..usize::min(entity.grid_pos_y + entity.grid_body, self.spatial_grid_dimension)
         {
             for x_pos in entity.grid_pos_x
-                ..usize::min(entity.grid_pos_x + entity.grid_body, SPATIAL_GRID_DIMENSION)
+                ..usize::min(entity.grid_pos_x + entity.grid_body, self.spatial_grid_dimension)
             {
                 remove_grid_position(
-                    (y_pos << ENCODING_BITS) | x_pos,
+                    (y_pos << self.encoding_bits) | x_pos,
                     &entity.index,
                     spatial_grid_ptr,
                     spatial_grid_locks_ptr,
@@ -666,6 +677,9 @@ impl Room {
         let entities_ptr = self.entities.as_mut_ptr() as usize;
         let spatial_grid_ptr = self.spatial_grid.as_mut_ptr() as usize;
         let spatial_grid_locks_ptr = self.spatial_grid_locks.as_mut_ptr() as usize;
+
+        let spatial_grid_dimension = self.spatial_grid_dimension;
+        let encoding_bits = self.encoding_bits;
 
         rayon::scope(|s| {
             for thread in 0..THREADS {
@@ -736,6 +750,8 @@ impl Room {
                                         entity.index,
                                         spatial_grid,
                                         spatial_grid_locks,
+                                        spatial_grid_dimension,
+                                        encoding_bits,
                                     );
                                 } else {
                                     if shift_x.0 == 0 {
@@ -750,6 +766,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         } else {
                                             update_entity_body(
@@ -762,6 +780,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         };
                                     } else if shift_y.0 == 0 {
@@ -776,6 +796,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         } else {
                                             update_entity_body(
@@ -788,6 +810,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         };
                                     } else {
@@ -802,6 +826,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         } else {
                                             update_entity_body(
@@ -814,6 +840,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         };
                                         let y_overlap_start =
@@ -829,6 +857,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         } else {
                                             update_entity_body(
@@ -841,6 +871,8 @@ impl Room {
                                                 entity.index,
                                                 spatial_grid,
                                                 spatial_grid_locks,
+                                                spatial_grid_dimension,
+                                                encoding_bits,
                                             );
                                         };
                                     };
@@ -897,16 +929,16 @@ impl Room {
                             for y_pos in entity.grid_pos_y
                                 ..usize::min(
                                     entity.grid_pos_y + entity.grid_body,
-                                    SPATIAL_GRID_DIMENSION,
+                                    spatial_grid_dimension,
                                 )
                             {
                                 for x_pos in entity.grid_pos_x
                                     ..usize::min(
                                         entity.grid_pos_x + entity.grid_body,
-                                        SPATIAL_GRID_DIMENSION,
+                                        spatial_grid_dimension,
                                     )
                                 {
-                                    let grid_index = (y_pos << ENCODING_BITS) | x_pos;
+                                    let grid_index = (y_pos << encoding_bits) | x_pos;
                                     let spatial_grid_position = &*spatial_grid.add(grid_index);
                                     if spatial_grid_position.len() <= 1 {
                                         continue;
@@ -926,7 +958,7 @@ impl Room {
                                             collision_entity.grid_pos_y,
                                         );
                                         let min_shared_coordinate =
-                                            (min_shared_y << ENCODING_BITS) | min_shared_x;
+                                            (min_shared_y << encoding_bits) | min_shared_x;
 
                                         if min_shared_coordinate == grid_index {
                                             if entity.body_type + collision_entity.body_type == 2 {
