@@ -9,7 +9,8 @@ The engine is primarily designed to handle large amounts of entities, and uses m
 
 Engine utilizes:
 
-`
+---
+
 Spatial hash grid implementation.
 
 Impulse collision calculations for minimal overhead.
@@ -23,12 +24,11 @@ Resizable vector for entities, with ID mapping to index and replaceable ID queue
 Partial grid body updates to avoid having to update unnecessary entity grid body positions in the spatial grid.
 
 Various unsafe methods for minor speedup and optimization.
-`
 
-
+---
 
 I have not yet thoroughly benchmarked the engine's performance, but it works well. A benchmark test file is provided. I ran 5k circles and 5k squares on my i7 8 core device with 16 threads and had it running under 6ms per tick. 
 
 Overall, can it be used for games? Yes. It's also pretty fast and much simpler compared to most engines. It's not the fastest engine ever, but it can still handle tens of thousands of entities in reasonable time.
 
-Further updates like more advanced collision ignoring typing (ability to ignore or enact physical collisions based on a given type ID), and potential optimizations like thread pooling may also be added soon.
+Further updates like more advanced collision ignoring typing (ability to ignore or enact physical collisions based on a given type ID), and potential optimizations like thread pooling may also be added in the future if I wish to continue this. 
