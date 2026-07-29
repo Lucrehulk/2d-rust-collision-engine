@@ -9,7 +9,7 @@ The engine is primarily designed to handle large amounts of entities, and uses m
 
 Engine utilizes:
 
-```
+`
 Spatial hash grid implementation.
 
 Impulse collision calculations for minimal overhead.
@@ -23,7 +23,7 @@ Resizable vector for entities, with ID mapping to index and replaceable ID queue
 Partial grid body updates to avoid having to update unnecessary entity grid body positions in the spatial grid.
 
 Various unsafe methods for minor speedup and optimization.
-```
+`
 
 
 
